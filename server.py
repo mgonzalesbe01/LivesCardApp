@@ -1,18 +1,19 @@
 # Servidor Backend en Python usando Flask y Mercado Pago SDK
-# Versión FINAL: Eliminación de moneda explícita para evitar errores de parámetros
+# Versión con CORS habilitado y Rutas Relativas soportadas
 
 import os
 import json
 from flask import Flask, request, jsonify, send_from_directory
+from flask_cors import CORS # 🚀 IMPORTANTE: Importamos CORS
 from mercadopago import SDK
 from werkzeug.exceptions import BadRequest
 
 # --- CONFIGURACIÓN ---
-# Asegúrate de que en Render la variable MP_ACCESS_TOKEN tenga tu token de Producción.
-MP_ACCESS_TOKEN = os.environ.get("MP_ACCESS_TOKEN", "APP_USR-1144922300830729-112020-5ea5bc88cad445723e167d84442662b9-3005078586")
+MP_ACCESS_TOKEN = os.environ.get("MP_ACCESS_TOKEN", "TU_TOKEN_DE_PRODUCCION_AQUI")
 mp = SDK(MP_ACCESS_TOKEN)
 
 app = Flask(__name__, static_folder='public')
+CORS(app) # 🚀 IMPORTANTE: Habilitamos CORS para toda la app
 
 # --- RUTAS ---
 
@@ -31,15 +32,15 @@ def procesar_pago():
         
     data = request.json
     
-    # Extraer datos
     token = data.get('token')
     payment_method_id = data.get('payment_method_id')
     issuer_id = data.get('issuer_id')
     installments = data.get('installments')
     transaction_amount = data.get('transaction_amount')
     cardholder_email = data.get('cardholderEmail')
-    cardholder_name = data.get('cardholderName', 'Usuario Prueba')
     
+    # Manejo robusto del nombre
+    cardholder_name = data.get('cardholderName', 'Usuario Prueba')
     parts = cardholder_name.split()
     first_name = parts[0] if len(parts) > 0 else "Usuario"
     last_name = " ".join(parts[1:]) if len(parts) > 1 else "Prueba"
@@ -52,11 +53,7 @@ def procesar_pago():
             "installments": int(installments),
             "payment_method_id": payment_method_id,
             "issuer_id": issuer_id,
-            
-            # 🚀 CORRECCIÓN: Eliminamos 'currency_id' y 'currency'.
-            # Dejamos que Mercado Pago use la moneda por defecto de tu cuenta (PEN).
-            # Esto evita el error Code 8 "Parameter name is wrong".
-
+            "currency_id": "PEN",
             "payer": {
                 "email": cardholder_email,
                 "first_name": first_name,
@@ -68,36 +65,22 @@ def procesar_pago():
             }
         }
         
-        # Llamar a la API
         api_result = mp.payment().create(payment_data)
         
-        # --- ZONA DE DEPURACIÓN ---
+        # DEBUG LOGGING
         http_status = api_result.get("status")
         response_data = api_result.get("response", {})
         
-        print("\n🔎 --- DEBUG INFO ---")
-        print(f"HTTP Status: {http_status}")
-        print("Respuesta Completa JSON:")
-        print(json.dumps(response_data, indent=2)) 
-        print("---------------------\n")
+        print("\n--- DEBUG INFO ---")
+        print(f"Status: {http_status}")
+        print(json.dumps(response_data, indent=2))
+        print("------------------\n")
         
-        # CASO 1: Error de API
         if http_status not in [200, 201]:
-            error_message = response_data.get('message', 'Error desconocido de API')
-            
-            if 'cause' in response_data and isinstance(response_data['cause'], list) and len(response_data['cause']) > 0:
-                cause_info = response_data['cause'][0]
-                description = cause_info.get('description', '')
-                code = cause_info.get('code', '')
-                error_message = f"{error_message} ({description} - Code: {code})"
-            
-            print(f"❌ Error de API detectado: {error_message}")
-            return jsonify({
-                "status": "error",
-                "message": f"Error API MercadoPago: {error_message}"
-            }), 400
+            # Extracción segura de mensajes de error de la API
+            msg = response_data.get('message', 'Error API')
+            return jsonify({"status": "error", "message": msg}), 400
 
-        # CASO 2: Respuesta Exitosa (Procesada)
         payment_status = response_data.get('status')
         status_detail = response_data.get('status_detail')
 
@@ -124,17 +107,12 @@ def procesar_pago():
                 "cc_rejected_max_attempts": "Límite de intentos excedido.",
                 "cc_rejected_other_reason": "Error genérico del banco."
             }
-            
-            mensaje_usuario = mensajes_error.get(status_detail, f"Rechazo: {status_detail}")
-            
-            return jsonify({
-                "status": "dead",
-                "message": mensaje_usuario
-            })
+            mensaje = mensajes_error.get(status_detail, f"Rechazo: {status_detail}")
+            return jsonify({"status": "dead", "message": mensaje})
 
     except Exception as e:
-        print(f"🔥 Error Crítico Python: {e}")
-        return jsonify({"status": "error", "message": f"Error interno: {str(e)}"}), 500
+        print(f"Error crítico: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/<path:path>')
 def serve_static(path):

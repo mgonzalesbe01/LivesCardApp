@@ -1,8 +1,7 @@
 // public/app_v2.js - Frontend conectado a Python en Render
 
 // ⚠️ REEMPLAZAR: Coloca aquí tu Public Key de Producción (LIVE)
-// Ejemplo: "APP_USR-12345678-1234-1234-1234-1234567890ab"
-const mp = new MercadoPago("APP_USR-ce6ba25b-5958-4a05-80a7-41c1aefcf6b0", {
+const mp = new MercadoPago("[TU_PUBLIC_KEY_DE_PRODUCCION_AQUI]", {
   locale: "es-PE",
 });
 
@@ -50,31 +49,26 @@ function createCardForm() {
               : Number(installments);
 
           try {
-            // 🚀 URL DE RENDER (PRODUCCIÓN)
-            const response = await fetch(
-              "https://livescardapp.onrender.com/procesar-pago",
-              {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  token,
-                  payment_method_id: paymentMethodId,
-                  issuer_id: issuerId,
-                  installments: finalInstallments,
-                  transaction_amount: "1.00",
-                  cardholderEmail: cardholderEmail,
-                }),
-              }
-            );
+            // 🚀 CAMBIO MAESTRO: Usamos ruta relativa '/'
+            // Esto funciona automáticamente en localhost, Render, o cualquier dominio.
+            const response = await fetch("/procesar-pago", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                token,
+                payment_method_id: paymentMethodId,
+                issuer_id: issuerId,
+                installments: finalInstallments,
+                transaction_amount: "1.00",
+                cardholderEmail: cardholderEmail,
+                // Si ya implementaste lo del nombre en el html, descomenta esta línea:
+                // cardholderName: document.getElementById('form-checkout__cardholderName').value
+              }),
+            });
 
             const result = await response.json();
             alert(result.message);
-
-            // Actualizar listas después del pago
             actualizarListas();
-
-            // Opcional: limpiar formulario
-            // document.getElementById("form-checkout").reset();
           } catch (error) {
             console.error("Error:", error);
             alert("Error de comunicación con el servidor.");
@@ -91,10 +85,8 @@ function createCardForm() {
 
 async function actualizarListas() {
   try {
-    // 🚀 URL DE RENDER (PRODUCCIÓN)
-    const response = await fetch(
-      "https://livescardapp.onrender.com/obtener-estados"
-    );
+    // 🚀 CAMBIO MAESTRO: Ruta relativa '/'
+    const response = await fetch("/obtener-estados");
     if (!response.ok) throw new Error("Error al obtener estados");
 
     const data = await response.json();
